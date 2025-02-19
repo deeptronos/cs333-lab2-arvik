@@ -190,17 +190,33 @@ int main(int argc, char **argv){
     // fprintf(stderr, "CTEST - archive_name: %s\n", archive_name);
     if (optind < argc){
         num_members = argc - optind;
+        if(num_members < 1){
+            return 0; // TODO graceful?
+        }
         member_filenames = malloc(num_members * sizeof(char*));
         if(member_filenames == NULL){
             fprintf(stderr, "Memory allocation failed\n");
             exit(EXIT_FAILURE);
         }
 
+        for(int i = 0;  i< num_members; ++i){
+            member_filenames[i] = strdup(argv[optind + i]);
+            if(member_filenames[i] == NULL){
+                fprintf(stderr, "Memory allocation failed for filename\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        // for(int i =0; i < num_members; ++i){
+        //     member_filenames[i] = argv[optind + i];
+        // }
         for(int i =0; i < num_members; ++i){
-            member_filenames[i] = argv[optind + i];
+            printf("\tfilename:%s\n", member_filenames[i]);
         }
     }
 
+    for (int i = 0; i < num_members; ++i){
+        free(member_filenames[i]);
+    }
     free(member_filenames);
 
     return 0;
