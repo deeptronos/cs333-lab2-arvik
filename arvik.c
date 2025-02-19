@@ -8,6 +8,7 @@
 #include <stdbool.h> 
 #include <fcntl.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "arvik.h"
 
@@ -173,11 +174,38 @@ int main(int argc, char **argv){
             char * slash = strchr(buf, '/');
             if (slash) *slash = '\0';
 
-            printf("%s\n", buf);
+            if (verbose){ // -v passed...
+                // Convert mode to symbolic permissions (logic here provided to me via a conversation with ChatGPT)
+                int mode = strtol(md.ar_mode, NULL, 8);
+                char perm[11] = {'-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '\0'};
+                char perms[] = "rwxrwxrwx";
+                for ( int i = 0; i < 9; ++i){
+                    if (mode & (1 << (8 - i))) perm[i+1] = perms[i];
+                }
 
-            // carefully move file pointer forward
+                // extract UID and GUID
+                int uid = atoi(md.ar_uid);
+                int gid = atoi(md.ar_gid);
+
+                // extract timestamp
+                int file_size = atoi(md.ar_size);
+
+                // convert timestamp
+                time_t mod_time = atol(md.ar_date);
+                struct tm *tm_info = localtime(&mod_time);
+                char time_buf[32];
+                strftime(time_buf, sizeof(time_buf), "%b %e %H:%M %Y", tm_info);
+
+                 // print verbose output
+                printf("%s %d/%d %7d %s %s\n", perm, uid, gid, file_size, time_buf, buf);
+            }
+            else{
+                printf("%s\n", buf);
+            }
+
+            // carefully move file pointer forward to next header, considering padding
             int file_size = atoi(md.ar_size);
-            int padding = (file_size % 2) ? 1 : 0; // Archive aligns file to even numbers via padding 
+            int padding = (file_size % 2) ? 1 : 0; // archive aligns file to even numbers via padding 
             lseek(iarch, file_size + padding, SEEK_CUR);
         }
         if(archive_name != NULL){
@@ -206,9 +234,7 @@ int main(int argc, char **argv){
                 exit(EXIT_FAILURE);
             }
         }
-        // for(int i =0; i < num_members; ++i){
-        //     member_filenames[i] = argv[optind + i];
-        // }
+  
         for(int i =0; i < num_members; ++i){
             printf("\tfilename:%s\n", member_filenames[i]);
         }
