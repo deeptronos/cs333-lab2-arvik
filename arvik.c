@@ -151,35 +151,64 @@ int main(int argc, char **argv){
 
     // TOC
     if(toc == 1){
-        char buf[100] = {'\0'};
+        char buf[17] = {'\0'};
         // validate tag
         read(iarch, buf, SARMAG);
 
         if(strncmp(buf, ARMAG, SARMAG) != 0){
             // not a valid arkiv file
             // print message and exit(1);
-            fprintf(stderr, "Invali archive file X_X");
+            fprintf(stderr, "Invalid archive file X_X");
             exit(EXIT_FAILURE);
         }
 
         struct ar_hdr md;
-        char * back_pos = NULL;
         // process metadata
-        while ( read(iarch, &md, sizeof(ar_hdr_t)) > 0 ){ // Slides has ar_hdr_t as arvik_header_t... is mine OK?
+        while ( read(iarch, &md, sizeof(struct ar_hdr)) > 0 ){ // Slides has ar_hdr_t as arvik_header_t... is mine OK?
             // print archive member name
-            memset(buf, 0, 100);
+            // memset(buf, 0, 100);
             strncpy(buf, md.ar_name, 16);
-            if ((back_pos = strchr(buf, '/')) != NULL){
-                *back_pos = '\0';
-            }
+            buf[16]='\0';
+
+            // remove trailing '/' if present
+            char * slash = strchr(buf, '/');
+            if (slash) *slash = '\0';
+
             printf("%s\n", buf);
-            lseek(iarch, atoi(md.ar_size), SEEK_CUR);
+
+            // move file pointer forward
+            int file_size = atoi(md.ar_size);
+            int padding = (file_size % 2) ? 1 : 0; // Archive aligns file to even numbers via padding 
+            lseek(iarch, file_size + padding, SEEK_CUR);
+
+            // if ((back_pos = strchr(buf, '/'))){
+            //     *back_pos = '\0';
+            // }
+            // printf("%s\n", buf);
+
+            // lseek(iarch, atoi(md.ar_size), SEEK_CUR);
         }
-        // we finished processing the archive members to the archive file!
-        //      read() call returned 0, indicating that we hit end-of-file.
         if(archive_name != NULL){
             close(iarch);
         }
+        // char * back_pos = NULL;
+        // process metadata
+        // while ( read(iarch, &md, sizeof(struct ar_hdr)) > 0 ){ // Slides has ar_hdr_t as arvik_header_t... is mine OK?
+        //     // print archive member name
+        //     memset(buf, 0, 100);
+        //     strncpy(buf, md.ar_name, 16);
+        //     if ((back_pos = strchr(buf, '/'))){
+        //         *back_pos = '\0';
+        //     }
+        //     printf("%s\n", buf);
+
+        //     lseek(iarch, atoi(md.ar_size), SEEK_CUR);
+        // }
+        // we finished processing the archive members to the archive file!
+        //      read() call returned 0, indicating that we hit end-of-file.
+        // if(archive_name != NULL){
+        //     close(iarch);
+        // }
     }
 
 
