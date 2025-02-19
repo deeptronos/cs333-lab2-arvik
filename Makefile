@@ -6,7 +6,7 @@ CC = gcc
 DEFINES =
 DEBUG = -g3 -O0
 #WERROR = -Werror -Wextra
-CFLAGS = $(DEFINES) $(DEBUG) -Wall -Wextra -Wshadow -Wunreachable-code -Wredundant-decls -Wmissing-declarations -Wold-style-definition -Wmissing-prototypes -Wdeclaration-after-statement -Wno-return-local-addr -Wunsafe-loop-optimizations -Wuninitialized -g #-v
+CFLAGS = $(DEFINES) $(DEBUG) -Wall -Werror -Wextra -Wshadow -Wunreachable-code -Wredundant-decls -Wmissing-declarations -Wold-style-definition -Wmissing-prototypes -Wdeclaration-after-statement -Wno-return-local-addr -Wunsafe-loop-optimizations -Wuninitialized -g #-v
 COMMENT = "This is a comment, not a comet"
 PERMS = og-rx
 
