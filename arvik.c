@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
+#include <utime.h>
+#include <sys/stat.h>
 
 #include "arvik.h"
 
@@ -16,10 +18,27 @@
 
 void usage(void);
 
+// bad fxns: TODO
 void write_to_file(const char * filename, const char * content);
 void read_from_file(const char * filename);
 void copy_file(const char * from, const char* to);
 
+void trim_leading_whitespace(char *s){ // Credit to https://www.delftstack.com/howto/c/trim-string-in-c/
+    int start = 0, end = strlen(s) - 1;
+    while(isspace(s[start])) {
+        start++;
+    }
+    while (end > start && isspace(s[end])) {
+        end--;
+    }
+
+    // If the string was trimmed, adjust the null terminator
+    if (start > 0 || end < (strlen(s) - 1)) {
+        memmove(s, s + start, end - start + 1);
+        s[end - start + 1] = '\0';
+    }
+
+}
 
 void usage(void) {
     fprintf(stderr, "Usage: arvik -[cxtvDUf:h] archive-file file...\n");
@@ -86,9 +105,9 @@ void copy_file(const char * from, const char * to){
 
 int main(int argc, char **argv){
     int opt = 0;
-    int extract, deterministic, verbose = -1;
+    int extract_flag, deterministic_flag, verbose_flag = -1;
 
-    int toc = 0;
+    int toc_flag = 0;
     char * archive_name = NULL;
     char ** member_filenames = NULL;
     int num_members = 0;
@@ -100,15 +119,15 @@ int main(int argc, char **argv){
     while ((opt = getopt(argc, argv, ARVIK_OPTIONS)) != -1) {
         switch (opt) {
             case 'x':
-                extract = 1;
+                extract_flag = 1;
                 break;
 
             case 'c':
-                extract = 0;
+                extract_flag= 0;
                 break;
 
             case 't':
-                toc = 1;
+                toc_flag = 1;
                 break;
                 
             default:
@@ -117,15 +136,15 @@ int main(int argc, char **argv){
                 break;
 
             case 'v':
-                verbose = 1;
+                verbose_flag = 1;
                 break;
 
             case 'D':
-                deterministic = 1;
+                deterministic_flag = 1;
                 break;
 
             case 'U':
-                deterministic = 0;
+                deterministic_flag = 0;
                 break;
 
             case 'f':
@@ -134,7 +153,7 @@ int main(int argc, char **argv){
                     usage();
                 }
                 // Copy archive name passed as argument to archive_name char array...
-                archive_name = malloc(sizeof(char) * strlen(optarg)); // TODO if memory is weird, the size calculations here should be checked.
+                archive_name = malloc(sizeof(char) * strlen(optarg)); // TODO if memory is weird, the size calculations here should be checked. // TODO free this shit!
                 strncpy(archive_name, optarg, strlen(optarg));
                 archive_name[strlen(optarg)] = '\0'; // TODO ok?
                 break;
@@ -145,14 +164,20 @@ int main(int argc, char **argv){
     }
     // If user supplied -f, open() that thang
     if(archive_name != NULL){
+        trim_leading_whitespace(archive_name);
         iarch = open(archive_name, O_RDONLY);
+        // Make sure open worked correctly...
+        if(iarch == -1){
+            fprintf(stderr, "Error opening source file %s", archive_name);
+            exit(EXIT_FAILURE);
+        }
     }else{
         exit(NO_ARCHIVE_NAME);
     }
 
 
     // TOC
-    if(toc == 1){
+    if(toc_flag == 1){
         char buf[17] = {'\0'};
         // validate tag
         read(iarch, buf, SARMAG);
@@ -175,7 +200,7 @@ int main(int argc, char **argv){
             char * slash = strchr(buf, '/');
             if (slash) *slash = '\0';
 
-            if (verbose){ // -v passed...
+            if (verbose_flag){ // -v passed...
                 // Convert mode to symbolic permissions (logic here provided to me via a conversation with ChatGPT)
                 int mode = strtol(md.ar_mode, NULL, 8);
                 char perm[11] = {'-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '\0'};
@@ -187,10 +212,10 @@ int main(int argc, char **argv){
                 // extract UID and GUID
                 int uid = atoi(md.ar_uid);
                 int gid = atoi(md.ar_gid);
-
-                // extract timestamp
+                
                 int file_size = atoi(md.ar_size);
 
+                // extract timestamp
                 // convert timestamp
                 time_t mod_time = atol(md.ar_date);
                 struct tm *tm_info = localtime(&mod_time);
@@ -215,7 +240,70 @@ int main(int argc, char **argv){
       
     }
 
+    // Extraction
+    if(extract_flag){
 
+        char buf[17] = {'\0'};
+        // valiate ARMAG header
+        read(iarch, buf, SARMAG);
+        if(strncmp(buf, ARMAG, SARMAG) != 0){
+            // not a valid arkiv file
+            // print message and exit(1);
+            fprintf(stderr, "Invalid archive file X_X");
+            exit(EXIT_FAILURE);
+        }
+
+        struct ar_hdr hdr;
+        // process metadata
+        while ( read(iarch, &hdr, sizeof(struct ar_hdr)) > 0 ){
+            // Copy name from file header to buf
+            strncpy(buf, hdr.ar_name, 16);
+            buf[16]='\0'; // Now null-terminate it
+            // remove trailing '/' if present in name
+            char * slash = strchr(buf, '/');
+            if (slash) *slash = '\0';
+
+            int file_size = atoi(hdr.ar_size);
+            // Open out file with permissions derived from header
+            int derived_mode = strtol(hdr.ar_mode, NULL, 8);
+
+            int out_fd = open(buf, O_WRONLY | O_CREAT | O_TRUNC, derived_mode);
+            if(out_fd < 0){
+                fprintf(stderr, "Failed to open file for writing out '%s'\n", buf);
+                exit(EXIT_FAILURE);
+            }
+
+            // Write content to out_fd
+            ssize_t bytes_read;
+            while((bytes_read = read(iarch, buf, BUF_SIZE)) > 0){ // Read (from file at iarch) and write that to out_fd.
+                write(out_fd, buf, bytes_read);
+            }
+
+            
+            int uid = atoi(hdr.ar_uid);
+            int gid = atoi(hdr.ar_gid);
+            // Extract original time
+            time_t mod_time = atol(hdr.ar_date);
+            struct tm *tm_info = localtime(&mod_time);
+            struct utimbuf times;
+            times.actime = time(0);  // Last-accessed time (right now!)
+            times.modtime = mod_time; // last-modified time (from archive)
+
+            // Store original filename in filename
+            char filename [17] = {'\0'};
+            strncpy(filename, hdr.ar_name, 16);
+            buf[16]='\0'; // Now null-terminate it
+            utime(filename, &times);
+            // Set file permissions
+            mode_t mode = (mode_t)strtol(hdr.ar_mode, NULL, 8);
+            fchmod(out_fd, mode);
+
+            if(verbose_flag){ printf("x %s\n", buf);}
+            lseek(iarch, file_size + (file_size % 2), SEEK_CUR);
+        }
+        if(verbose_flag){ printf("\t Completed extraction.");}
+    }
+    
     // Process optional filenames at end of invocation
     if (optind < argc){
         num_members = argc - optind;
@@ -249,3 +337,4 @@ int main(int argc, char **argv){
 
     return 0;
 }
+ 
