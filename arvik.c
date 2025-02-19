@@ -86,13 +86,14 @@ void copy_file(const char * from, const char * to){
 int main(int argc, char **argv){
     int opt, extract, deterministic, verbose = 0;
 
+    int toc = 0;
     char * archive_name = NULL;
     char ** member_filenames = NULL;
     int num_members = 0;
     // char ** archive_members = (char**) malloc(sizeof(1));
     // char ** filenames = NULL;
 
-    // char c;
+    int iarch = -1;
 
     while ((opt = getopt(argc, argv, ARVIK_OPTIONS)) != -1) {
         switch (opt) {
@@ -105,6 +106,7 @@ int main(int argc, char **argv){
                 break;
 
             case 't':
+                toc = 1;
                 break;
                 
             default:
@@ -134,12 +136,53 @@ int main(int argc, char **argv){
                 strncpy(archive_name, optarg, strlen(optarg));
                 archive_name[strlen(optarg)] = '\0'; // TODO ok?
                 break;
-
             // default:
             //     usage();
             //     break;
         }
     }
+    // If user supplied -f, open() that thang
+    if(archive_name != NULL){
+        iarch = open(archive_name, O_RDONLY);
+    }else{
+        exit(NO_ARCHIVE_NAME);
+    }
+
+
+    // TOC
+    if(toc == 1){
+        char buf[100] = {'\0'};
+        // validate tag
+        read(iarch, buf, SARMAG);
+
+        if(strncmp(buf, ARMAG, SARMAG) != 0){
+            // not a valid arkiv file
+            // print message and exit(1);
+            fprintf(stderr, "Invali archive file X_X");
+            exit(EXIT_FAILURE);
+        }
+
+        struct ar_hdr md;
+        char * back_pos = NULL;
+        // process metadata
+        while ( read(iarch, &md, sizeof(ar_hdr_t)) > 0 ){ // Slides has ar_hdr_t as arvik_header_t... is mine OK?
+            // print archive member name
+            memset(buf, 0, 100);
+            strncpy(buf, md.ar_name, 16);
+            if ((back_pos = strchr(buf, '/')) != NULL){
+                *back_pos = '\0';
+            }
+            printf("%s\n", buf);
+            lseek(iarch, atoi(md.ar_size), SEEK_CUR);
+        }
+        // we finished processing the archive members to the archive file!
+        //      read() call returned 0, indicating that we hit end-of-file.
+        if(archive_name != NULL){
+            close(iarch);
+        }
+    }
+
+
     fprintf(stderr, "CTEST - archive_name: %s\n", archive_name);
     if (optind < argc){
         num_members = argc - optind;
