@@ -85,7 +85,8 @@ void copy_file(const char * from, const char * to){
 }
 
 int main(int argc, char **argv){
-    int opt, extract, deterministic, verbose = 0;
+    int opt = 0;
+    int extract, deterministic, verbose = -1;
 
     int toc = 0;
     char * archive_name = NULL;
@@ -215,7 +216,7 @@ int main(int argc, char **argv){
     }
 
 
-    // fprintf(stderr, "CTEST - archive_name: %s\n", archive_name);
+    // Process optional filenames at end of invocation
     if (optind < argc){
         num_members = argc - optind;
         if(num_members < 1){
@@ -240,6 +241,7 @@ int main(int argc, char **argv){
         }
     }
 
+    // Clean up memory allocated for optional filenames
     for (int i = 0; i < num_members; ++i){
         free(member_filenames[i]);
     }
