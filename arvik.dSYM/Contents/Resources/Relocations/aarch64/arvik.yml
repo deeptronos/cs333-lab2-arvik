@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/catherine/Developer/PSU/CS333/lab2/lab2/arvik'
+relocations:     []
+...
